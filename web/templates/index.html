@@ -11,19 +11,6 @@
     <div id='content'></div>
     <script type='text/jsx'>
 
-var urlBase =
-  location.protocol + '//' +
-  location.hostname +
-  (location.port ? ':'+location.port: '');
-var socket = io.connect(urlBase + '/client');
-socket.on('connect', function() {
-  socket.emit('my event', {data: 'I\'m connected!'});
-});
-socket.on('update', function(data) {
-  console.log('got update...');
-  console.log(data);
-});
-
 function toHex(num, width) {
   var s = num.toString(16);
   return s.length >= width
@@ -33,12 +20,37 @@ function toHex(num, width) {
 
 var nbsp = '\u00a0';
 
+var GdbWeb = React.createClass({
+  getInitialState: function() {
+    return null;
+  },
+  componentDidMount: function() {
+    var urlBase =
+      location.protocol + '//' +
+      location.hostname +
+      (location.port ? ':'+location.port: '');
+    var socket = io.connect(urlBase + '/client');
+    socket.on('update', function(data) {
+      this.setState(data);
+    }.bind(this));
+  },
+  render: function() {
+    if (this.state === null) {
+      return (<p>Loading...</p>);
+    } else {
+      console.log(this.state);
+      return (<AssemblyListing {...this.state} />);
+    }
+  },
+});
+
+
 var AssemblyListing = React.createClass({
   formatAddress: function(addr) {
     return toHex(addr, this.props.bits/4);
   },
   render: function() {
-    var insNodes = this.props.instructions.map(function (ins) {
+    var insNodes = this.props.assembly.instructions.map(function (ins) {
       var isBreakpoint = this.props.breakpoints.indexOf(ins.address) >= 0;
       var isActive = ins.address === this.props.ip;
 
@@ -100,7 +112,7 @@ var data = {
 };
 
 React.render(
-  React.createElement(AssemblyListing, data),
+  React.createElement(GdbWeb, null),
   document.getElementById('content')
 );
 
