@@ -1,0 +1,109 @@
+<html>
+  <head>
+    <title>gdbweb</title>
+    <script src='https://fb.me/react-0.13.2.js'></script>
+    <script src='https://fb.me/JSXTransformer-0.13.2.js'></script>
+    <script src='https://code.jquery.com/jquery-2.1.3.min.js'></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/0.9.16/socket.io.min.js"></script>
+    <link rel='stylesheet' type='text/css' href='/static/style.css'></style>
+  </head>
+  <body>
+    <div id='content'></div>
+    <script type='text/jsx'>
+
+var urlBase =
+  location.protocol + '//' +
+  location.hostname +
+  (location.port ? ':'+location.port: '');
+var socket = io.connect(urlBase + '/client');
+socket.on('connect', function() {
+  socket.emit('my event', {data: 'I\'m connected!'});
+});
+socket.on('update', function(data) {
+  console.log('got update...');
+  console.log(data);
+});
+
+function toHex(num, width) {
+  var s = num.toString(16);
+  return s.length >= width
+      ? s
+      : new Array(width - s.length + 1).join('0') + s;
+}
+
+var nbsp = '\u00a0';
+
+var AssemblyListing = React.createClass({
+  formatAddress: function(addr) {
+    return toHex(addr, this.props.bits/4);
+  },
+  render: function() {
+    var insNodes = this.props.instructions.map(function (ins) {
+      var isBreakpoint = this.props.breakpoints.indexOf(ins.address) >= 0;
+      var isActive = ins.address === this.props.ip;
+
+      var markers = [];
+      var className = '';
+      if (isBreakpoint) {
+        markers.push(<div className='marker-breakpoint'></div>);
+        className += 'breakpoint ';
+      }
+      if (isActive) {
+        markers.push(<div className='marker-active'></div>);
+        className += 'active ';
+      }
+
+      return (<tr className={className}>
+        <td className='col-markers'>
+          {markers}
+        </td>
+        <td className='col-address'>
+          {this.formatAddress(ins.address)}
+        </td>
+        <td className='col-label'>
+          {ins.label}
+        </td>
+        <td className='col-mnemonic'>
+          {ins.mnemonic}
+        </td>
+        <td className='col-op'>
+          {ins.op_str}
+        </td>
+      </tr>);
+    }.bind(this));
+    return (<table className='assembly'>
+      {insNodes}
+    </table>);
+  }
+});
+
+var data = {
+  bits: 64,
+  instructions: [
+    {
+      address: 0x1000,
+      label: 'main',
+      mnemonic: 'mov',
+      op_str: 'eax, edx'
+    },
+    {
+      address: 0x1005,
+      label: 'main+5',
+      mnemonic: 'add',
+      op_str: 'eax, 5'
+    }
+  ],
+  breakpoints: [0x1005],
+  ip: 0x1000,
+  registers: {
+  }
+};
+
+React.render(
+  React.createElement(AssemblyListing, data),
+  document.getElementById('content')
+);
+
+    </script>
+  </body>
+</html>

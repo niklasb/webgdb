@@ -1,0 +1,22 @@
+.assembly {
+  font-family: monospace;
+  border-spacing: 0;
+}
+.assembly td {
+  padding: 0.1em 0.3em;
+}
+.assembly .active {
+  background: rgb(150,255,255);
+}
+.assembly .breakpoint {
+  /*background: rgb(255,150,150);*/
+}
+.assembly .col-label {
+  color: gray;
+}
+.assembly .marker-breakpoint {
+  background-color: red;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
