@@ -21,12 +21,11 @@ div {
   border-spacing: 0;
   width: 100%;
 }
+.table-top td, .table-bottom td {
+  vertical-align: top;
+}
 .table-top {
   border-bottom: 1px solid black;
-}
-.table-top td {
-  padding: 1em 0;
-  vertical-align: top;
 }
 .cell-assembly {
   width: 70%;
@@ -40,16 +39,23 @@ div {
 }
 
 /* style */
-.assembly, .registers {
+.assembly, .registers, .memory {
   font-family: monospace;
   font-size: inherit;
   border-spacing: 0;
+  margin: 1em;
 }
-.assembly td, .registers td {
-  padding: 0 0.3em;
+.assembly {
+  margin-left: 0;
+}
+.assembly td, .registers td, .memory td {
+  padding: 0 0.5em;
 }
 .assembly .active {
   background: rgb(150,255,255);
+}
+.assembly .col-address, .memory .col-address {
+  color: gray;
 }
 .assembly .col-label {
   color: gray;
@@ -62,6 +68,7 @@ div {
   background-color: red;
   border-radius: 50%;
 }
+
 .registers .col-value-dec {
   text-align: right;
 }

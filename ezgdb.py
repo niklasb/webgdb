@@ -140,3 +140,15 @@ class EzGdb(object):
         num = self.get_breakpoint_num(addr)
         if num is not None:
             self.execute('delete breakpoint {}'.format(num))
+
+    def read(self, start, size):
+        out = self.execute('x/{}bx {}'.format(size, start))
+        res = []
+        for line in out.splitlines():
+            res += [int(x, 16) for x in line.split(':')[1].split()]
+        assert len(res) == size
+        return res
+
+    def eval_location(self, expr):
+        out = self.execute('x/1b {}'.format(expr))
+        return int(out.split(':')[0], 16)

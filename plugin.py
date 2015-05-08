@@ -16,6 +16,7 @@ if os.path.islink(FILE):
 sys.path.append(os.path.join(os.path.dirname(FILE)))
 
 import ezgdb
+import util
 ez = ezgdb.EzGdb()
 
 SOCKETIO_HOST = '127.0.0.1'
@@ -44,12 +45,34 @@ class GdbWeb(object):
         self.views = []
         self.server = server_conn
         self.assembly_view = None
+        self.data_views = [
+            {
+                'location': '$' + ez.get_stack_reg(),
+                'unit': ez.get_bits() / 8,
+                'count': 10,
+            }
+        ]
 
     def set_server_conn(self, server_conn):
         self.server = server_conn
 
     def compute_assembly_view(self, view):
         return ez.disassemble(view['location'], view['count'])
+
+    def compute_data_view(self, view):
+        unit = view['unit']
+        count = view['count']
+        addr = ez.eval_location(view['location'])
+        data = ez.read(addr, unit * count)
+        words = []
+        for x in util.grouper(data, unit):
+            words.append({
+                'address': addr,
+                'value': util.unpack_little_endian(x),
+            })
+            addr += unit
+        assert len(words) == count
+        return words
 
     def view_with_result(self, view, f):
         view = dict(view.items())
@@ -74,9 +97,13 @@ class GdbWeb(object):
                 self.adapt_assembly_view()
                 self.assembly_view = self.view_with_result(self.assembly_view,
                         self.compute_assembly_view)
+                self.data_views = [
+                    self.view_with_result(view, self.compute_data_view)
+                    for view in self.data_views
+                ]
             except gdb.MemoryError:
-                # if handle_change is called from a thread, we get this error for
-                # whatever reason. In that case, just use the old state
+                # if handle_change is called from a thread, we can't read memory
+                # for whatever reason. In that case, just use the old state.
                 pass
 
             bps = [addr for num, addr in ez.get_breakpoints()]
@@ -88,7 +115,7 @@ class GdbWeb(object):
                     'registers': ez.get_reginfo(),
                 },
                 'assemblyView': self.assembly_view,
-                'dataViews': [],
+                'dataViews': self.data_views,
             }
             self.send_state(state)
         except:

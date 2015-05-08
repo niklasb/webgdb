@@ -31,39 +31,54 @@ var GdbWeb = React.createClass({
   componentDidMount: function() {
     this.api = new ServerConnection(getSocketIOUrl(), this.setState.bind(this));
   },
-  makeDataView: function(view) {
+  loading: function() {
+    return (<p>Loading...</p>);
   },
   render: function() {
-    if (this.state === null) {
-      return (<p>Loading...</p>);
-    } else {
-      var dataViews = this.state.dataViews.map(function(view) {
-        return (<td>{this.makeDataView(view)}</td>);
-      }.bind(this));
+    if (this.state === null)
+      return this.loading();
+
+    var dataViews = this.state.dataViews.map(function(view) {
       return (
-        <div>
-          <table className='table-top'>
-            <tr>
-              <td className='cell-assembly'>
-                <AssemblyView api={this.api} info={this.state.info} view={this.state.assemblyView} />
-              </td>
-              <td className='cell-registers'>
-                <Registers api={this.api} info={this.state.info} />
-              </td>
-            </tr>
-          </table>
-          <table className='table-bottom'>
-            <tr>
-              {dataViews}
-            </tr>
-          </table>
-        </div>);
-    }
+        <td className='cell-memory'>
+          <DataView api={this.api} info={this.state.info} view={view} />
+        </td>);
+    }.bind(this));
+
+    return (
+      <div>
+        <table className='table-top'>
+          <tr>
+            <td className='cell-assembly'>
+              <AssemblyView api={this.api} info={this.state.info} view={this.state.assemblyView} />
+            </td>
+            <td className='cell-registers'>
+              <Registers api={this.api} info={this.state.info} />
+            </td>
+          </tr>
+        </table>
+        <table className='table-bottom'>
+          <tr>
+            {dataViews}
+          </tr>
+        </table>
+      </div>);
   },
 });
 
 var DataView = React.createClass({
   render: function() {
+    var rows = this.props.view.result.map(function(word) {
+      return (
+        <tr>
+          <td className='col-address'>0x{word.address.hexPadded}</td>
+          <td className='col-value'>0x{word.value.hexPadded}</td>
+        </tr>);
+    });
+    return (
+      <table className='memory'>
+        {rows}
+      </table>);
   }
 });
 
