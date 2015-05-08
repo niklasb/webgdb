@@ -1,8 +1,13 @@
-.assembly {
+body {
+  font-size: 0.8em;
+}
+
+.assembly, .registers {
   font-family: monospace;
+  font-size: inherit;
   border-spacing: 0;
 }
-.assembly td {
+.assembly td, .registers td {
   padding: 0.1em 0.3em;
 }
 .assembly .active {
@@ -14,9 +19,14 @@
 .assembly .col-label {
   color: gray;
 }
-.assembly .marker-breakpoint {
+.assembly .breakpoint-marker {
+  width: 1em;
+  height: 1em;
+}
+.assembly .breakpoint-marker.active {
   background-color: red;
-  width: 10px;
-  height: 10px;
   border-radius: 50%;
+}
+.registers .col-value-dec {
+  text-align: right;
 }

@@ -12,20 +12,18 @@ gdb_state = {}
 def index():
     return render_template('index.html')
 
-#@socketio.on('my event', namespace='/client')
-#def handle_my_custom_event(json):
-    #print('received json: ' + str(json))
-    #emit('my response', json, namespace='/client')
-
 @socketio.on('connect', namespace='/client')
 def on_client_connect():
     print('Client connected, sending state')
     emit('update', gdb_state['state'], namespace='/client')
 
+@socketio.on('rpc', namespace='/client')
+def on_rpc(data):
+    emit('rpc', data, namespace='/gdb', broadcast=True)
+
 # gdb <-> webserver
 @socketio.on('update', namespace='/gdb')
-def on_gdb_update(msg):
-    data = json.loads(msg)
+def on_gdb_update(data):
     print('Updated GDB state')
     gdb_state['state'] = data
     emit('update', data, namespace='/client', broadcast=True)

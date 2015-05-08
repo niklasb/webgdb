@@ -1,6 +1,7 @@
 from __future__ import print_function
 import re
 import tempfile
+import threading
 import traceback
 
 import util
@@ -12,25 +13,17 @@ REGISTERS = {
     64: ['rax', 'rbx', 'rcx', 'rdx', 'rsi', 'rdi', 'rbp', 'rsp', 'rip',
          'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
 }
+FLAGS_REG = 'eflags'
 
 class EzGdb(object):
     def __init__(self, gdb):
         self.gdb = gdb
+        self.mx = threading.Lock()
 
     def execute(self, cmd):
-        with tempfile.NamedTemporaryFile() as f:
-            self.gdb.execute('set logging off') # prevent nested call
-            self.gdb.execute('set height 0') # disable paging
-            self.gdb.execute('set logging file {}'.format(f.name))
-            self.gdb.execute('set logging overwrite on')
-            self.gdb.execute('set logging redirect on')
-            self.gdb.execute('set logging on')
-            try:
-                self.gdb.execute(cmd)
-                self.gdb.flush()
-                return f.read()
-            finally:
-                self.gdb.execute('set logging off')
+        with self.mx:
+            print('Executing command {}'.format(cmd))
+            return self.gdb.execute(cmd, False, True)
 
     @util.memoize
     def get_arch(self):
@@ -55,9 +48,19 @@ class EzGdb(object):
         for line in out.splitlines():
             if re.match(r'^(\d+).*', line):
                 addr = line.split()[4]
+                num = line.split()[0]
                 if addr.startswith('0x'):
-                    result.append(int(addr, 16))
+                    result.append((int(num), int(addr, 16)))
         return result
+
+    def is_mapped(self, addr):
+        return len(self.execute('x/1b {}'.addr).split()) <= 4
+
+    def get_smart_value(self, val):
+        return {
+            'value': val,
+            'smart': None,
+        }
 
     def get_registers(self):
         regs = {}
@@ -65,6 +68,16 @@ class EzGdb(object):
             parts = line.split()
             regs[parts[0]] = int(parts[1], 16)
         return regs
+
+    def get_reginfo(self):
+        values = self.get_registers()
+        regs = REGISTERS[self.get_bits()] + [FLAGS_REG]
+        return [
+            {
+                'name': r,
+                'value': self.get_smart_value(values[r])
+            }
+            for r in regs]
 
     def get_ip(self):
         return self.get_registers()[self.get_ip_reg()]
@@ -92,6 +105,8 @@ class EzGdb(object):
                 if label[0] == '+':
                     label = func + label
                 parts = parts[2:]
+            else:
+                parts = parts[1:]
 
             # join with succeeding line if wrapped
             if not parts:
@@ -105,3 +120,16 @@ class EzGdb(object):
                 'op_str': op_str,
             })
         return ins
+
+    def get_breakpoint_num(self, addr):
+        bps = self.get_breakpoints()
+        return next((num for num, bp in bps if bp == addr), None)
+
+    def set_breakpoint(self, addr):
+        if get_breakpoint_num(addr) is None:
+            self.execute('break *{}'.format(addr))
+
+    def delete_breakpoint(self, addr):
+        num = self.get_breakpoint_num(addr)
+        if num is not None:
+            self.execute('delete breakpoint {}'.format(num))

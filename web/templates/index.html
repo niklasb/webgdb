@@ -4,112 +4,140 @@
     <script src='https://fb.me/react-0.13.2.js'></script>
     <script src='https://fb.me/JSXTransformer-0.13.2.js'></script>
     <script src='https://code.jquery.com/jquery-2.1.3.min.js'></script>
-    <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/0.9.16/socket.io.min.js"></script>
+    <script src='//cdnjs.cloudflare.com/ajax/libs/socket.io/0.9.16/socket.io.min.js'></script>
     <link rel='stylesheet' type='text/css' href='/static/style.css'></style>
   </head>
   <body>
     <div id='content'></div>
     <script type='text/jsx'>
 
-function toHex(num, width) {
-  var s = num.toString(16);
-  return s.length >= width
-      ? s
-      : new Array(width - s.length + 1).join('0') + s;
+var nbsp = '\u00a0';
+
+function getSocketIOUrl() {
+  var urlBase =
+    location.protocol + '//' +
+    location.hostname +
+    (location.port ? ':'+location.port: '');
+  return urlBase + '/client';
 }
 
-var nbsp = '\u00a0';
+function ServerConnection(url, onUpdateState) {
+  this.socket = io.connect(url);
+  this.socket.on('update', onUpdateState);
+}
+ServerConnection.prototype.getSocket = function() { return this.socket; };
+ServerConnection.prototype.addBreakpoint = function(addr) {
+  console.log('API', this.socket);
+  console.log('Setting breakpoint at', addr);
+  this.socket.emit('rpc', {method: 'set_breakpoint', args: {
+    address: addr
+  }});
+};
+ServerConnection.prototype.deleteBreakpoint = function(addr) {
+  console.log('Deleting breakpoint at', addr);
+  this.socket.emit('rpc', {method: 'delete_breakpoint', args: {
+    address: addr
+  }});
+};
 
 var GdbWeb = React.createClass({
   getInitialState: function() {
     return null;
   },
   componentDidMount: function() {
-    var urlBase =
-      location.protocol + '//' +
-      location.hostname +
-      (location.port ? ':'+location.port: '');
-    var socket = io.connect(urlBase + '/client');
-    socket.on('update', function(data) {
+    this.api = new ServerConnection(getSocketIOUrl(), function(data) {
       this.setState(data);
     }.bind(this));
+    console.log(this.api);
+    console.log(this.api.socket);
+    console.log(this.api.getSocket());
+  },
+  makeDataView: function(view) {
   },
   render: function() {
     if (this.state === null) {
       return (<p>Loading...</p>);
     } else {
       console.log(this.state);
-      return (<AssemblyListing {...this.state} />);
+      var views = this.state.dataViews.map(this.makeDataView);
+      return (
+        <div>
+          <AssemblyView api={this.api} info={this.state.info} view={this.state.assemblyView} />
+          {views}
+          <Registers api={this.api} info={this.state.info} />
+        </div>);
     }
   },
 });
 
-
-var AssemblyListing = React.createClass({
-  formatAddress: function(addr) {
-    return toHex(addr, this.props.bits/4);
-  },
+var Registers = React.createClass({
   render: function() {
-    var insNodes = this.props.assembly.instructions.map(function (ins) {
-      var isBreakpoint = this.props.breakpoints.indexOf(ins.address) >= 0;
-      var isActive = ins.address === this.props.ip;
-
-      var markers = [];
-      var className = '';
-      if (isBreakpoint) {
-        markers.push(<div className='marker-breakpoint'></div>);
-        className += 'breakpoint ';
-      }
-      if (isActive) {
-        markers.push(<div className='marker-active'></div>);
-        className += 'active ';
-      }
-
-      return (<tr className={className}>
-        <td className='col-markers'>
-          {markers}
-        </td>
-        <td className='col-address'>
-          {this.formatAddress(ins.address)}
-        </td>
-        <td className='col-label'>
-          {ins.label}
-        </td>
-        <td className='col-mnemonic'>
-          {ins.mnemonic}
-        </td>
-        <td className='col-op'>
-          {ins.op_str}
-        </td>
-      </tr>);
+    var regRows = this.props.info.registers.map(function(reg) {
+      return (
+        <tr>
+          <td className='col-name'>
+            {reg.name}
+          </td>
+          <td className='col-value-hex'>
+            {reg.value.value.hexPadded}
+          </td>
+          <td className='col-value-dec'>
+            {reg.value.value.val < (1<<20) ? reg.value.value.dec : ''}
+          </td>
+          <td className='col-value-smart'>
+            {reg.value.smart ? reg.value.smart : ''}
+          </td>
+        </tr>);
     }.bind(this));
-    return (<table className='assembly'>
-      {insNodes}
-    </table>);
-  }
+    return (
+      <table className='registers'>
+        {regRows}
+      </table>);
+  },
 });
 
-var data = {
-  bits: 64,
-  instructions: [
-    {
-      address: 0x1000,
-      label: 'main',
-      mnemonic: 'mov',
-      op_str: 'eax, edx'
-    },
-    {
-      address: 0x1005,
-      label: 'main+5',
-      mnemonic: 'add',
-      op_str: 'eax, 5'
-    }
-  ],
-  breakpoints: [0x1005],
-  ip: 0x1000,
-  registers: {
-  }
+var getHex = function(num) {
+  return num.hex;
 };
+
+var AssemblyView = React.createClass({
+  render: function() {
+    var insRows = this.props.view.result.map(function(ins) {
+      var isBreakpoint =
+          this.props.info.breakpoints.map(getHex).indexOf(ins.address.hex) >= 0;
+      var isActive = ins.address.hex === this.props.info.ip.hex;
+      var toggleBreakpoint = function() {
+        (isBreakpoint
+            ? this.props.api.deleteBreakpoint
+            : this.props.api.addBreakpoint).bind(this.props.api)(ins.address.hex);
+      }.bind(this);
+
+      return (
+        <tr className={isActive ? 'active' : ''}>
+          <td className='col-marker' onClick={toggleBreakpoint}>
+            <div className={'breakpoint-marker ' + (isBreakpoint ? 'active' : '')}>
+            </div>
+          </td>
+          <td className='col-address'>
+            {ins.address.hexPadded}
+          </td>
+          <td className='col-label'>
+            {ins.label}
+          </td>
+          <td className='col-mnemonic'>
+            {ins.mnemonic}
+          </td>
+          <td className='col-op'>
+            {ins.op_str}
+          </td>
+        </tr>);
+    }.bind(this));
+    return (
+      <table className='assembly'>
+        {insRows}
+      </table>);
+  }
+});
 
 React.render(
   React.createElement(GdbWeb, null),

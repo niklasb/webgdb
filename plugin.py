@@ -2,8 +2,11 @@ from __future__ import print_function
 import json
 import logging
 import os
+import six
 import sys
+import threading
 import traceback
+import types
 
 from socketIO_client import SocketIO, BaseNamespace
 
@@ -16,51 +19,105 @@ import ezgdb
 
 ez = ezgdb.EzGdb(gdb)
 
+def pack_num(num, word_size):
+    hexed = hex(num)[2:].rstrip('L')
+    return {
+        'val': num,
+        'hex': hexed,
+        'hexPadded': hexed.rjust(word_size*2, '0'),
+        'dec': str(num).rstrip('L'),
+    }
+
+def fix_numbers(obj, word_size):
+    if isinstance(obj, six.integer_types):
+        return pack_num(obj, word_size)
+    elif isinstance(obj, types.DictType):
+        return { k: fix_numbers(v, word_size) for k, v in obj.items()}
+    elif isinstance(obj, (types.ListType, types.TupleType)):
+        return [fix_numbers(x, word_size) for x in obj]
+    return obj
+
+class GdbWeb(object):
+    def __init__(self, server_conn=None):
+        self.views = []
+        self.server = server_conn
+        self.assembly_view = None
+
+    def set_server_conn(self, server_conn):
+        self.server = server_conn
+
+    def compute_assembly_view(self, view):
+        return ez.disassemble(view['location'], view['count'])
+
+    def view_with_result(self, view, f):
+        view = dict(view.items())
+        view['result'] = f(view)
+        return view
+
+    def adapt_assembly_view(self):
+        ip = ez.get_ip()
+        reset_to_ip = {'location': ip, 'count': 20}
+        if not self.assembly_view:
+            self.assembly_view = reset_to_ip
+        ins = self.compute_assembly_view(self.assembly_view)
+        if ip < ins[0]['address'] or ip + 15 >= ins[-1]['address']:
+            self.assembly_view = reset_to_ip
+
+    def send_state(self, state):
+        self.server.emit('update', fix_numbers(state, ez.get_bits() / 8))
+
+    def handle_change(self):
+        try:
+            self.adapt_assembly_view()
+            bps = [addr for num, addr in ez.get_breakpoints()]
+            state = {
+                'info': {
+                    'bits': ez.get_bits(),
+                    'breakpoints': bps,
+                    'ip': ez.get_ip(),
+                    'registers': ez.get_reginfo(),
+                },
+                'assemblyView': self.view_with_result(
+                    self.assembly_view, self.compute_assembly_view),
+                'dataViews': [],
+            }
+            self.send_state(state)
+        except:
+            traceback.print_exc(file=sys.stderr)
+
+    def rpc_set_breakpoint(self, address):
+        ez.set_breakpoint(int(address, 16))
+        self.handle_change()
+
+    def rpc_delete_breakpoint(self, address):
+        ez.delete_breakpoint(int(address, 16))
+        self.handle_change()
+
+    def handle_rpc(self, rpc):
+        try:
+            print('RPC: %s' % repr(rpc))
+            getattr(self, 'rpc_' + rpc['method'])(**rpc['args'])
+        except:
+            traceback.print_exc(file=sys.stderr)
+
+gdbweb = GdbWeb()
+
 # set up socket.io client
+SOCKETIO_HOST = '127.0.0.1'
+SOCKETIO_PORT = 5000
 logging.getLogger('requests').setLevel(logging.WARNING)
 logging.getLogger('socketIO_client').setLevel(logging.WARNING)
 logging.basicConfig(level=logging.WARNING)
-class GdbNamespace(BaseNamespace):
-    pass
-io = SocketIO('127.0.0.1', 5000)
+class GdbNamespace(BaseNamespace): pass
+io = SocketIO(SOCKETIO_HOST, SOCKETIO_PORT)
 io_gdb = io.define(GdbNamespace, '/gdb')
+gdbweb.set_server_conn(io_gdb)
+io_gdb.on('rpc', gdbweb.handle_rpc)
 
-def update_state(state):
-    io_gdb.emit('update', json.dumps(state))
+# start message main loop
+t = threading.Thread(target=lambda: io.wait())
+t.daemon = True
+t.start()
 
-# set up event handlers
-def cont_handler(evt):
-    print('cont: %s' % repr(evt))
-
-def on_change():
-    bits = ez.get_bits()
-    ip = ez.get_ip()
-    breakpoints = ez.get_breakpoints()
-    regs = ez.get_registers()
-    ins = ez.disassemble(ip, 20)
-    state = {
-        'bits': bits,
-        'assembly': { 'instructions': ins },
-        'breakpoints': breakpoints,
-        'ip': ip,
-        'registers': regs,
-    }
-    update_state(state)
-
-def stop_handler(evt):
-    try:
-        on_change()
-    except:
-        traceback.print_exc(file=sys.stderr)
-
-gdb.events.cont.connect(cont_handler)
-gdb.events.stop.connect(stop_handler)
-#print(ez.get_arch())
-#print(ez.get_stack_reg())
-#print(ez.get_ip_reg())
-#print(ez.get_breakpoints())
-#regs = ez.get_registers()
-#print(regs)
-#ip = regs[ez.get_ip_reg()]
-#print(ip)
-#print(ez.disassemble(0x7ffff7b00810, 10))
+# set up GDB event handlers
+gdb.events.stop.connect(lambda evt: gdbweb.handle_change())
