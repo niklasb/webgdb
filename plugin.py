@@ -16,8 +16,10 @@ if os.path.islink(FILE):
 sys.path.append(os.path.join(os.path.dirname(FILE)))
 
 import ezgdb
+ez = ezgdb.EzGdb()
 
-ez = ezgdb.EzGdb(gdb)
+SOCKETIO_HOST = '127.0.0.1'
+SOCKETIO_PORT = 5000
 
 def pack_num(num, word_size):
     hexed = hex(num)[2:].rstrip('L')
@@ -60,7 +62,7 @@ class GdbWeb(object):
         if not self.assembly_view:
             self.assembly_view = reset_to_ip
         ins = self.compute_assembly_view(self.assembly_view)
-        if ip < ins[0]['address'] or ip + 15 >= ins[-1]['address']:
+        if ip < ins[0]['address'] or ip + 10 >= ins[-1]['address']:
             self.assembly_view = reset_to_ip
 
     def send_state(self, state):
@@ -68,7 +70,15 @@ class GdbWeb(object):
 
     def handle_change(self):
         try:
-            self.adapt_assembly_view()
+            try:
+                self.adapt_assembly_view()
+                self.assembly_view = self.view_with_result(self.assembly_view,
+                        self.compute_assembly_view)
+            except gdb.MemoryError:
+                # if handle_change is called from a thread, we get this error for
+                # whatever reason. In that case, just use the old state
+                pass
+
             bps = [addr for num, addr in ez.get_breakpoints()]
             state = {
                 'info': {
@@ -77,8 +87,7 @@ class GdbWeb(object):
                     'ip': ez.get_ip(),
                     'registers': ez.get_reginfo(),
                 },
-                'assemblyView': self.view_with_result(
-                    self.assembly_view, self.compute_assembly_view),
+                'assemblyView': self.assembly_view,
                 'dataViews': [],
             }
             self.send_state(state)
@@ -95,7 +104,6 @@ class GdbWeb(object):
 
     def handle_rpc(self, rpc):
         try:
-            print('RPC: %s' % repr(rpc))
             getattr(self, 'rpc_' + rpc['method'])(**rpc['args'])
         except:
             traceback.print_exc(file=sys.stderr)
@@ -103,11 +111,9 @@ class GdbWeb(object):
 gdbweb = GdbWeb()
 
 # set up socket.io client
-SOCKETIO_HOST = '127.0.0.1'
-SOCKETIO_PORT = 5000
-logging.getLogger('requests').setLevel(logging.WARNING)
-logging.getLogger('socketIO_client').setLevel(logging.WARNING)
-logging.basicConfig(level=logging.WARNING)
+logging.getLogger('requests').setLevel(logging.ERROR)
+logging.getLogger('socketIO_client').setLevel(logging.ERROR)
+logging.basicConfig(level=logging.ERROR)
 class GdbNamespace(BaseNamespace): pass
 io = SocketIO(SOCKETIO_HOST, SOCKETIO_PORT)
 io_gdb = io.define(GdbNamespace, '/gdb')

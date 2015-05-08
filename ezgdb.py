@@ -1,4 +1,5 @@
 from __future__ import print_function
+import gdb
 import re
 import tempfile
 import threading
@@ -16,14 +17,13 @@ REGISTERS = {
 FLAGS_REG = 'eflags'
 
 class EzGdb(object):
-    def __init__(self, gdb):
-        self.gdb = gdb
+    def __init__(self):
         self.mx = threading.Lock()
 
     def execute(self, cmd):
         with self.mx:
-            print('Executing command {}'.format(cmd))
-            return self.gdb.execute(cmd, False, True)
+            #print('Executing command {}'.format(cmd))
+            return gdb.execute(cmd, False, True)
 
     @util.memoize
     def get_arch(self):
@@ -54,7 +54,7 @@ class EzGdb(object):
         return result
 
     def is_mapped(self, addr):
-        return len(self.execute('x/1b {}'.addr).split()) <= 4
+        return len(self.execute('x/1b {}'.format(addr)).split()) <= 4
 
     def get_smart_value(self, val):
         return {
@@ -83,9 +83,16 @@ class EzGdb(object):
         return self.get_registers()[self.get_ip_reg()]
 
     def disassemble(self, addr, n):
-        self.gdb.execute('set disassembly-flavor intel')
+        gdb.execute('set disassembly-flavor intel')
         asm = self.execute('x/{}i {}'.format(n, addr))
         lines = asm.splitlines()
+        # We need to support at least two different formats:
+        # 1. ADDR <label+X>: INS
+        # 2. ADDR: INS
+        #
+        # With disassemble command, we could also get prefix
+        # "Dump of function label:", then instruction format
+        # 3. ADDR <+X>: INS
         func = None
         if lines[0][-1] == ':':
             func = lines[0].split()[-1][:-1]
@@ -126,7 +133,7 @@ class EzGdb(object):
         return next((num for num, bp in bps if bp == addr), None)
 
     def set_breakpoint(self, addr):
-        if get_breakpoint_num(addr) is None:
+        if self.get_breakpoint_num(addr) is None:
             self.execute('break *{}'.format(addr))
 
     def delete_breakpoint(self, addr):

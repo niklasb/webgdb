@@ -1,20 +1,55 @@
+html {
+  padding: 0;
+}
 body {
-  font-size: 0.8em;
+  font-size: 8pt;
+  padding: 0;
+  margin: 0;
+}
+table {
+  font-size: inherit;
+}
+div {
+  padding: 0;
+  margin: 0;
 }
 
+/* layout */
+.table-top, .table-bottom {
+  padding: 0;
+  margin: 0;
+  border-spacing: 0;
+  width: 100%;
+}
+.table-top {
+  border-bottom: 1px solid black;
+}
+.table-top td {
+  padding: 1em 0;
+  vertical-align: top;
+}
+.cell-assembly {
+  width: 70%;
+}
+.cell-registers {
+  border-left: 1px solid black;
+  width: 30%;
+}
+.registers {
+  padding-left: 1em;
+}
+
+/* style */
 .assembly, .registers {
   font-family: monospace;
   font-size: inherit;
   border-spacing: 0;
 }
 .assembly td, .registers td {
-  padding: 0.1em 0.3em;
+  padding: 0 0.3em;
 }
 .assembly .active {
   background: rgb(150,255,255);
-}
-.assembly .breakpoint {
-  /*background: rgb(255,150,150);*/
 }
 .assembly .col-label {
   color: gray;
