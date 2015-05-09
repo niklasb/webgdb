@@ -66,9 +66,11 @@ class GdbWeb(object):
         data = ez.read(addr, unit * count)
         words = []
         for x in util.grouper(data, unit):
+            val = util.unpack_le(x)
             words.append({
                 'address': addr,
-                'value': util.unpack_little_endian(x),
+                'value': val,
+                'smart': ez.make_smart(val),
             })
             addr += unit
         assert len(words) == count
@@ -107,12 +109,15 @@ class GdbWeb(object):
                 pass
 
             bps = [addr for num, addr in ez.get_breakpoints()]
+            regs = ez.get_reginfo()
+            for reg in regs:
+                reg['smart'] = ez.make_smart(reg['value'])
             state = {
                 'info': {
                     'bits': ez.get_bits(),
                     'breakpoints': bps,
                     'ip': ez.get_ip(),
-                    'registers': ez.get_reginfo(),
+                    'registers': regs,
                 },
                 'assemblyView': self.assembly_view,
                 'dataViews': self.data_views,

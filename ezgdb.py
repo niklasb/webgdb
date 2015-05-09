@@ -16,6 +16,9 @@ REGISTERS = {
 }
 FLAGS_REG = 'eflags'
 
+def is_ascii(c):
+    return 0x20 <= c <= 0x7e or chr(c) in '\r\n\t'
+
 class EzGdb(object):
     def __init__(self):
         self.mx = threading.Lock()
@@ -54,13 +57,37 @@ class EzGdb(object):
         return result
 
     def is_mapped(self, addr):
-        return len(self.execute('x/1b {}'.format(addr)).split()) <= 4
+        try:
+            self.execute('x/1b {}'.format(addr))
+            return True
+        except gdb.MemoryError:
+            return False
 
-    def get_smart_value(self, val):
-        return {
-            'value': val,
-            'smart': None,
-        }
+    def make_smart(self, val):
+        if self.is_mapped(val):
+            # TODO check if code
+            bytes = self.read(val, 8)
+            strlen = next((i for i, b in enumerate(bytes) if not b), 8)
+            if strlen >= 4 and all(map(is_ascii, bytes[:strlen])):
+                return {
+                    'type': 'string',
+                    'value': self.read_c_str(val),
+                    'address': val,
+                }
+            # just a regular pointer, read target and recurse
+            target32 = util.unpack_le(self.read(val, 4))
+            if target32 <= 2**16:
+                target = { 'type': 'number', 'value': target32 }
+            else:
+                target64 = util.unpack_le(self.read(val, 8))
+                target = self.make_smart(target64)
+            return {
+                'type': 'pointer',
+                'value': val,
+                'target': target,
+            }
+
+        return { 'type': 'number', 'value': val }
 
     def get_registers(self):
         regs = {}
@@ -75,7 +102,7 @@ class EzGdb(object):
         return [
             {
                 'name': r,
-                'value': self.get_smart_value(values[r])
+                'value': values[r],
             }
             for r in regs]
 
@@ -147,6 +174,16 @@ class EzGdb(object):
         for line in out.splitlines():
             res += [int(x, 16) for x in line.split(':')[1].split()]
         assert len(res) == size
+        return res
+
+    def read_c_str(self, addr):
+        res = ''
+        while True:
+            b = self.read(addr, 1)[0]
+            if not b:
+                break
+            res += chr(b)
+            addr += 1
         return res
 
     def eval_location(self, expr):

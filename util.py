@@ -16,5 +16,12 @@ def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return itertools.izip_longest(fillvalue=fillvalue, *args)
 
-def unpack_little_endian(byte_values):
+def unpack_le(byte_values):
     return sum(x * pow(0x100, i) for i, x in enumerate(byte_values))
+
+def pack_le(value):
+    res = []
+    while value:
+        res.append(value & 0xff)
+        value >>= 8
+    return value

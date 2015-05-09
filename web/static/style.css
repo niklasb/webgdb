@@ -28,14 +28,11 @@ div {
   border-bottom: 1px solid black;
 }
 .cell-assembly {
-  width: 70%;
+  width: 60%;
 }
 .cell-registers {
   border-left: 1px solid black;
-  width: 30%;
-}
-.registers {
-  padding-left: 1em;
+  width: 40%;
 }
 
 /* style */
@@ -67,8 +64,4 @@ div {
 .assembly .breakpoint-marker.active {
   background-color: red;
   border-radius: 50%;
-}
-
-.registers .col-value-dec {
-  text-align: right;
 }

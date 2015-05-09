@@ -91,10 +91,7 @@ var Registers = React.createClass({
             {reg.name}
           </td>
           <td className='col-value-hex'>
-            0x{reg.value.value.hexPadded}
-          </td>
-          <td className='col-value-dec'>
-            {reg.value.value.val < (1<<20) ? reg.value.value.dec : ''}
+            0x{reg.value.hexPadded}
           </td>
           <td className='col-value-smart'>
             {reg.value.smart ? reg.value.smart : ''}
