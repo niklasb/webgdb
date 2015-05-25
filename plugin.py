@@ -94,6 +94,7 @@ class GdbWeb(object):
         self.server.emit('update', fix_numbers(state, ez.get_bits() / 8))
 
     def handle_change(self):
+        print('Handle change')
         try:
             try:
                 self.adapt_assembly_view()
@@ -147,8 +148,11 @@ logging.getLogger('requests').setLevel(logging.ERROR)
 logging.getLogger('socketIO_client').setLevel(logging.ERROR)
 logging.basicConfig(level=logging.ERROR)
 class GdbNamespace(BaseNamespace): pass
+print('Connecting to web server...')
+# TODO add timeout
 io = SocketIO(SOCKETIO_HOST, SOCKETIO_PORT)
 io_gdb = io.define(GdbNamespace, '/gdb')
+print('Connected.')
 gdbweb.set_server_conn(io_gdb)
 io_gdb.on('rpc', gdbweb.handle_rpc)
 

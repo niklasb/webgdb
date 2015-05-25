@@ -64,8 +64,17 @@ class EzGdb(object):
             return False
 
     def make_smart(self, val):
+        # is it a pointer at all?
         if self.is_mapped(val):
-            # TODO check if code
+            # is it code?
+            if self.is_executable(val):
+                return {
+                    'type': 'instruction',
+                    'value': self.disassemble(val, 1),
+                    'address': val,
+                }
+
+            # is it an ASCII string?
             bytes = self.read(val, 8)
             strlen = next((i for i, b in enumerate(bytes) if not b), 8)
             if strlen >= 4 and all(map(is_ascii, bytes[:strlen])):
@@ -76,6 +85,7 @@ class EzGdb(object):
                 }
             # just a regular pointer, read target and recurse
             target32 = util.unpack_le(self.read(val, 4))
+            # herustic: detect pointer to 32-bit integer
             if target32 <= 2**16:
                 target = { 'type': 'number', 'value': target32 }
             else:
@@ -87,6 +97,7 @@ class EzGdb(object):
                 'target': target,
             }
 
+        # no pointer, assume integer
         return { 'type': 'number', 'value': val }
 
     def get_registers(self):
@@ -189,3 +200,37 @@ class EzGdb(object):
     def eval_location(self, expr):
         out = self.execute('x/1b {}'.format(expr))
         return int(out.split(':')[0], 16)
+
+    def get_pid(self):
+        out = self.execute('info proc')
+        return int(out.splitlines()[0].split()[-1])
+
+    def get_maps(self):
+        maps = []
+        with open('/proc/{}/maps'.format(self.get_pid())) as f:
+            for line in f:
+                parts = line.split()
+                start, end = [int(x, 16) for x in parts[0].split('-')]
+                mode = parts[1]
+                offset = int(parts[2], 16)
+                fname = None
+                if len(parts) > 5:
+                    fname = parts[-1]
+                maps.append({
+                    'start': start,
+                    'end': end,
+                    'mode': mode,
+                    'offset': offset,
+                    'file': fname,
+                })
+        return maps
+
+    def get_map_for_address(self, addr):
+        maps = self.get_maps()
+        return next((m for m in self.get_maps() if m['start'] <= addr < m['end']), None)
+
+    def has_mode(self, addr, mode):
+        return mode in self.get_map_for_address(addr)['mode'][:3]
+
+    def is_executable(self, addr):
+        return self.has_mode(addr, 'x')
